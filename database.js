@@ -19,22 +19,24 @@ class Database {
           users: {},
           admins: [config.admin.userId].filter(Boolean),
           bannedUsers: [],
-          channels: config.channels.list,
-          bankDetails: {
-            accountName: '',
-            accountNumber: '',
-            bankName: '',
-          },
-          redeemCodes: {},
-          pendingPayments: {},
-          settings: {
-            botActive: true,
-            maintenanceMode: false,
-            lastBackup: new Date().toISOString(),
-          },
+          bankDetails: { accountName: '', accountNumber: '', bankName: '' },
+          products: {},
+          orders: {},
+          settings: { botActive: true, lastBackup: new Date().toISOString() },
         };
         this.save(defaultDB);
         console.log('✅ Database initialized successfully');
+      } else {
+        // Migrate: ensure new fields exist
+        const existing = this.getDB();
+        let changed = false;
+        if (!existing.products) { existing.products = {}; changed = true; }
+        if (!existing.orders) { existing.orders = {}; changed = true; }
+        if (!existing.bankDetails) { existing.bankDetails = { accountName: '', accountNumber: '', bankName: '' }; changed = true; }
+        if (changed) {
+          this.save(existing);
+          console.log('✅ Database migrated to shop schema');
+        }
       }
     } catch (error) {
       console.error('❌ Database initialization error:', error.message);
@@ -54,8 +56,7 @@ class Database {
 
   save(data) {
     try {
-      // Create backup if enabled
-      if (config.database.backupEnabled) {
+      if (config.database.backupEnabled && fs.existsSync(this.filePath)) {
         this.createBackup();
       }
       fs.writeFileSync(this.filePath, JSON.stringify(data, null, 2), 'utf8');
@@ -68,60 +69,28 @@ class Database {
   createBackup() {
     try {
       const data = fs.readFileSync(this.filePath, 'utf8');
-      const backupData = {
-        ...JSON.parse(data),
-        backupTime: new Date().toISOString(),
-      };
-      fs.writeFileSync(
-        this.backupPath,
-        JSON.stringify(backupData, null, 2),
-        'utf8'
-      );
+      fs.writeFileSync(this.backupPath, data, 'utf8');
     } catch (error) {
-      console.warn('⚠️ Backup creation warning:', error.message);
+      console.warn('⚠️ Backup warning:', error.message);
     }
   }
 
-  restoreBackup() {
-    try {
-      if (fs.existsSync(this.backupPath)) {
-        const backupData = fs.readFileSync(this.backupPath, 'utf8');
-        fs.writeFileSync(this.filePath, backupData, 'utf8');
-        console.log('✅ Database restored from backup');
-        return true;
-      }
-      return false;
-    } catch (error) {
-      console.error('❌ Error restoring backup:', error.message);
-      return false;
-    }
-  }
-
-  // User operations
+  // ── User operations ──────────────────────────────────────────────
   getUser(userId) {
     const db = this.getDB();
     if (!db.users[userId]) {
-      db.users[userId] = this.createNewUser(userId);
+      db.users[userId] = this._newUser(userId);
       this.save(db);
     }
     return db.users[userId];
   }
 
-  createNewUser(userId) {
+  _newUser(userId) {
     return {
       id: userId,
       username: 'Unknown',
       chatId: userId,
-      points: 0,
-      referrals: 0,
-      referralCode: this.generateReferralCode(),
       verified: true,
-      isPremium: false,
-      dailyClaimsToday: 0,
-      lastDailyClaim: null,
-      viewsUsedToday: 0,
-      reactionsUsedToday: 0,
-      lastDailyReset: new Date().toDateString(),
       joinedAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -129,24 +98,25 @@ class Database {
 
   updateUser(userId, userData) {
     const db = this.getDB();
-    db.users[userId] = {
-      ...this.getUser(userId),
-      ...userData,
-      updatedAt: new Date().toISOString(),
-    };
+    db.users[userId] = { ...this.getUser(userId), ...userData, updatedAt: new Date().toISOString() };
     this.save(db);
     return db.users[userId];
   }
 
-  getAllUsers() {
-    return this.getDB().users;
+  getAllUsers() { return this.getDB().users; }
+
+  // ── Admin operations ─────────────────────────────────────────────
+  isAdmin(userId) {
+    const db = this.getDB();
+    const id = String(userId);
+    return db.admins.some(a => String(a) === id);
   }
 
-  // Admin operations
   addAdmin(userId) {
     const db = this.getDB();
-    if (!db.admins.includes(userId)) {
-      db.admins.push(userId);
+    const id = String(userId);
+    if (!db.admins.some(a => String(a) === id)) {
+      db.admins.push(id);
       this.save(db);
       return true;
     }
@@ -155,24 +125,23 @@ class Database {
 
   removeAdmin(userId) {
     const db = this.getDB();
-    db.admins = db.admins.filter(id => id !== userId);
+    db.admins = db.admins.filter(a => String(a) !== String(userId));
     this.save(db);
     return true;
   }
 
-  isAdmin(userId) {
-    return this.getDB().admins.includes(userId);
+  getAdmins() { return this.getDB().admins; }
+
+  // ── Ban operations ───────────────────────────────────────────────
+  isBanned(userId) {
+    return this.getDB().bannedUsers.some(id => String(id) === String(userId));
   }
 
-  getAdmins() {
-    return this.getDB().admins;
-  }
-
-  // Ban operations
   banUser(userId) {
     const db = this.getDB();
-    if (!db.bannedUsers.includes(userId)) {
-      db.bannedUsers.push(userId);
+    const id = String(userId);
+    if (!db.bannedUsers.some(x => String(x) === id)) {
+      db.bannedUsers.push(id);
       this.save(db);
       return true;
     }
@@ -181,34 +150,13 @@ class Database {
 
   unbanUser(userId) {
     const db = this.getDB();
-    db.bannedUsers = db.bannedUsers.filter(id => id !== userId);
+    db.bannedUsers = db.bannedUsers.filter(x => String(x) !== String(userId));
     this.save(db);
     return true;
   }
 
-  isBanned(userId) {
-    return this.getDB().bannedUsers.includes(userId);
-  }
-
-  // Channel operations
-  getChannels() {
-    return this.getDB().channels;
-  }
-
-  addChannel(channelName) {
-    const db = this.getDB();
-    if (!db.channels.includes(channelName)) {
-      db.channels.push(channelName);
-      this.save(db);
-      return true;
-    }
-    return false;
-  }
-
-  // Bank details operations
-  getBankDetails() {
-    return this.getDB().bankDetails;
-  }
+  // ── Bank details ─────────────────────────────────────────────────
+  getBankDetails() { return this.getDB().bankDetails || {}; }
 
   updateBankDetails(details) {
     const db = this.getDB();
@@ -221,109 +169,84 @@ class Database {
     return db.bankDetails;
   }
 
-  // Redeem code operations
-  generateRedeemCode(points, uses) {
-    const code = Math.random().toString(36).substring(2, 8).toUpperCase();
+  // ── Product operations ───────────────────────────────────────────
+  addProduct(product) {
     const db = this.getDB();
-    db.redeemCodes[code] = {
-      points,
-      usesLeft: uses,
-      createdAt: new Date().toISOString(),
-      createdBy: 'admin',
-    };
+    const id = 'prod_' + Date.now();
+    db.products[id] = { id, ...product, available: true, createdAt: new Date().toISOString() };
     this.save(db);
-    return code;
+    return db.products[id];
   }
 
-  redeemCode(code, userId) {
+  updateProduct(productId, updates) {
     const db = this.getDB();
-    const codeData = db.redeemCodes[code];
-
-    if (!codeData) {
-      return { success: false, message: 'Code not found' };
-    }
-
-    if (codeData.usesLeft <= 0) {
-      return { success: false, message: 'Code has been used up' };
-    }
-
-    codeData.usesLeft--;
-    if (codeData.usesLeft === 0) {
-      delete db.redeemCodes[code];
-    }
-
-    const user = db.users[userId];
-    user.points += codeData.points;
-
+    if (!db.products[productId]) return null;
+    db.products[productId] = { ...db.products[productId], ...updates, updatedAt: new Date().toISOString() };
     this.save(db);
-    return {
-      success: true,
-      message: `Code redeemed! +${codeData.points} points`,
-      points: codeData.points,
-    };
+    return db.products[productId];
   }
 
-  getRedeemCodes() {
-    return this.getDB().redeemCodes;
-  }
-
-  // Payment operations
-  addPendingPayment(paymentId, paymentData) {
+  deleteProduct(productId) {
     const db = this.getDB();
-    db.pendingPayments[paymentId] = {
-      ...paymentData,
-      createdAt: new Date().toISOString(),
-      status: 'pending',
-    };
+    if (!db.products[productId]) return false;
+    delete db.products[productId];
     this.save(db);
+    return true;
   }
 
-  getPendingPayments() {
-    return this.getDB().pendingPayments;
+  getProduct(productId) { return this.getDB().products[productId] || null; }
+  getAllProducts() { return this.getDB().products; }
+
+  getProductsByCategory(category) {
+    return Object.values(this.getDB().products).filter(p => p.category === category && p.available);
   }
 
-  updatePaymentStatus(paymentId, status) {
+  // ── Order operations ─────────────────────────────────────────────
+  createOrder(data) {
     const db = this.getDB();
-    if (db.pendingPayments[paymentId]) {
-      db.pendingPayments[paymentId].status = status;
-      db.pendingPayments[paymentId].updatedAt = new Date().toISOString();
-      this.save(db);
-      return true;
-    }
-    return false;
-  }
-
-  // Utility methods
-  generateReferralCode() {
-    return Math.random().toString(36).substring(2, 10).toUpperCase();
-  }
-
-  resetDailyLimits() {
-    const db = this.getDB();
-    const today = new Date().toDateString();
-
-    Object.keys(db.users).forEach(userId => {
-      const user = db.users[userId];
-      if (user.lastDailyReset !== today) {
-        user.dailyClaimsToday = 0;
-        user.viewsUsedToday = 0;
-        user.reactionsUsedToday = 0;
-        user.lastDailyReset = today;
-      }
-    });
-
+    const id = 'ord_' + Date.now();
+    db.orders[id] = { id, ...data, status: 'pending', createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() };
     this.save(db);
+    return db.orders[id];
+  }
+
+  getOrder(orderId) { return this.getDB().orders[orderId] || null; }
+  getAllOrders() { return this.getDB().orders; }
+
+  getOrdersByStatus(status) {
+    return Object.values(this.getDB().orders).filter(o => o.status === status);
+  }
+
+  getUserOrders(userId) {
+    return Object.values(this.getDB().orders)
+      .filter(o => String(o.userId) === String(userId))
+      .sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  }
+
+  updateOrderStatus(orderId, status) {
+    const db = this.getDB();
+    if (!db.orders[orderId]) return null;
+    db.orders[orderId].status = status;
+    db.orders[orderId].updatedAt = new Date().toISOString();
+    this.save(db);
+    return db.orders[orderId];
   }
 
   getStats() {
     const db = this.getDB();
+    const orders = Object.values(db.orders || {});
     return {
       totalUsers: Object.keys(db.users).length,
-      premiumUsers: Object.values(db.users).filter(u => u.isPremium).length,
-      verifiedUsers: Object.values(db.users).filter(u => u.verified).length,
-      bannedUsers: db.bannedUsers.length,
+      totalProducts: Object.keys(db.products || {}).length,
+      totalOrders: orders.length,
+      pendingOrders: orders.filter(o => o.status === 'pending').length,
+      confirmedOrders: orders.filter(o => o.status === 'confirmed').length,
+      deliveredOrders: orders.filter(o => o.status === 'delivered').length,
+      totalRevenue: orders
+        .filter(o => o.status === 'confirmed' || o.status === 'delivered')
+        .reduce((sum, o) => sum + Number(o.total), 0),
       totalAdmins: db.admins.length,
-      totalPoints: Object.values(db.users).reduce((sum, u) => sum + u.points, 0),
+      bannedUsers: db.bannedUsers.length,
     };
   }
 }

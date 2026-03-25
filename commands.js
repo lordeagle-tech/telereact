@@ -1,451 +1,103 @@
 import { db } from './database.js';
-import { Logger, MessageFormatter, APIHelper } from './utils.js';
-import { UserHandler, AdminHandler, ChannelHandler } from './handlers.js';
+import { Logger } from './utils.js';
+import { AdminHandler, OrderHandler } from './handlers.js';
 import config from './config.js';
 
-export class CommandProcessor {
-  static async processUserCommand(bot, chatId, userId, text, args) {
-    const command = args[0];
+class CommandProcessor {
+  static async processAdminCommand(bot, chatId, userId, text, parts) {
+    const command = parts[0].toLowerCase();
 
-    switch (command) {
-      case '/daily':
-        return await this.dailyCommand(bot, chatId, userId);
-
-      case '/view':
-        return await this.viewCommand(bot, chatId, userId, args[1]);
-
-      case '/react':
-        return await this.reactCommand(bot, chatId, userId, args[1]);
-
-      case '/buyprem':
-        return await this.buyPremiumCommand(bot, chatId, userId);
-
-      case '/invite':
-        return await this.inviteCommand(bot, chatId, userId);
-
-      case '/stats':
-        return await this.statsCommand(bot, chatId, userId);
-
-      case '/help':
-        return await this.helpCommand(bot, chatId, userId);
-
-      default:
-        return await bot.sendMessage(chatId, '❓ Unknown command. Type /help for assistance.');
-    }
-  }
-
-  static async adminCommand(bot, chatId, userId, text, args) {
-    if (!db.isAdmin(userId)) {
-      await bot.sendMessage(chatId, '❌ Not authorized!');
+    if (command === '/ban' && parts[1]) {
+      const targetId = parts[1];
+      AdminHandler.banUser(targetId)
+        ? await bot.sendMessage(chatId, `✅ User ${targetId} has been banned.`)
+        : await bot.sendMessage(chatId, `❌ Could not ban user ${targetId}.`);
       return;
     }
 
-    const command = args[0];
-
-    switch (command) {
-      case '/addadmin':
-        return await this.addAdminCommand(bot, chatId, args[1]);
-
-      case '/list':
-        return await this.listCommand(bot, chatId);
-
-      case '/broadcast':
-        return await this.broadcastCommand(bot, chatId, text);
-
-      case '/edit':
-        return await this.editBankCommand(bot, chatId);
-
-      case '/ban':
-        return await this.banCommand(bot, chatId, args[1]);
-
-      case '/unban':
-        return await this.unbanCommand(bot, chatId, args[1]);
-
-      case '/addchn':
-        return await this.addChannelCommand(bot, chatId, args[1]);
-
-      case '/gencode':
-        return await this.gencodeCommand(bot, chatId, args[1], args[2]);
-
-      case '/aigen':
-        return await this.aigenCommand(bot, chatId, text);
-
-      case '/stats_sys':
-        return await this.systemStatsCommand(bot, chatId);
-
-      default:
-        return await bot.sendMessage(chatId, '❓ Unknown admin command.');
-    }
-  }
-
-  // User Commands
-  static async dailyCommand(bot, chatId, userId) {
-    const user = db.getUser(userId);
-    if (db.isBanned(userId)) {
-      await bot.sendMessage(chatId, '🚫 Your account has been banned!');
+    if (command === '/unban' && parts[1]) {
+      const targetId = parts[1];
+      AdminHandler.unbanUser(targetId)
+        ? await bot.sendMessage(chatId, `✅ User ${targetId} has been unbanned.`)
+        : await bot.sendMessage(chatId, `❌ Could not unban user ${targetId}.`);
       return;
     }
 
-    const result = UserHandler.claimDaily(userId);
-    await bot.sendMessage(chatId, result.message);
-  }
-
-  static async viewCommand(bot, chatId, userId, amount) {
-    const user = db.getUser(userId);
-    if (db.isBanned(userId)) {
-      await bot.sendMessage(chatId, '🚫 Your account has been banned!');
+    if (command === '/addadmin' && parts[1]) {
+      AdminHandler.addAdmin(parts[1])
+        ? await bot.sendMessage(chatId, `✅ User ${parts[1]} is now an admin.`)
+        : await bot.sendMessage(chatId, `❌ Could not add admin.`);
       return;
     }
 
-    if (!amount) {
-      const maxViews = user.isPremium
-        ? config.features.premiumViewsLimit
-        : config.features.freeViewsLimit;
+    if (command === '/removeadmin' && parts[1]) {
+      AdminHandler.removeAdmin(parts[1])
+        ? await bot.sendMessage(chatId, `✅ User ${parts[1]} removed from admins.`)
+        : await bot.sendMessage(chatId, `❌ Could not remove admin.`);
+      return;
+    }
+
+    if (command === '/stats') {
+      const s = AdminHandler.getSystemStats();
       await bot.sendMessage(
         chatId,
-        `👁️ BOOST VIEWS\n\nUsage: /view <amount>\nMax today: ${maxViews - user.viewsUsedToday}\n\nExample: /view 50`
+        `📊 STORE STATISTICS\n\n👥 Users: ${s.totalUsers}\n📦 Products: ${s.totalProducts}\n📋 Total Orders: ${s.totalOrders}\n⏳ Pending: ${s.pendingOrders}\n✅ Confirmed: ${s.confirmedOrders}\n🚚 Delivered: ${s.deliveredOrders}\n💰 Revenue: ${config.shop.currencySymbol}${s.totalRevenue.toFixed(2)}\n👮 Admins: ${s.totalAdmins}\n🚫 Banned: ${s.bannedUsers}`
       );
       return;
     }
 
-    const result = UserHandler.useViews(userId, parseInt(amount));
-    if (!result.success) {
-      await bot.sendMessage(chatId, result.message);
+    if (command === '/broadcast' && parts.length > 1) {
+      const message = parts.slice(1).join(' ');
+      const users = Object.values(db.getAllUsers());
+      let sent = 0;
+      for (const user of users) {
+        try {
+          if (!db.isBanned(user.id)) {
+            await bot.sendMessage(user.chatId, `📢 ANNOUNCEMENT\n\n${message}`);
+            sent++;
+          }
+        } catch (e) {
+          Logger.warn(`Could not broadcast to ${user.username}`);
+        }
+      }
+      await bot.sendMessage(chatId, `✅ Broadcast sent to ${sent} users.`);
       return;
     }
 
-    // Call API to boost views
-    const apiResult = await APIHelper.boostViews(parseInt(amount), chatId);
-    if (apiResult.success) {
-      await bot.sendMessage(chatId, result.message);
-    } else {
-      await bot.sendMessage(chatId, `❌ Error: ${apiResult.error}`);
-    }
-  }
-
-  static async reactCommand(bot, chatId, userId, amount) {
-    const user = db.getUser(userId);
-    if (db.isBanned(userId)) {
-      await bot.sendMessage(chatId, '🚫 Your account has been banned!');
-      return;
-    }
-
-    if (!amount) {
-      const maxReactions = user.isPremium
-        ? config.features.premiumReactionsLimit
-        : config.features.freeReactionsLimit;
+    if (command === '/help') {
       await bot.sendMessage(
         chatId,
-        `❤️ BOOST REACTIONS\n\nUsage: /react <amount>\nMax today: ${maxReactions - user.reactionsUsedToday}\n\nExample: /react 30`
+        `⚙️ ADMIN COMMANDS\n\n/ban <userId> — Ban a user\n/unban <userId> — Unban a user\n/addadmin <userId> — Add admin\n/removeadmin <userId> — Remove admin\n/stats — Store statistics\n/broadcast <message> — Send to all users\n/help — This message\n\nUse /start to open the admin panel.`
       );
       return;
     }
-
-    const result = UserHandler.useReactions(userId, parseInt(amount));
-    if (!result.success) {
-      await bot.sendMessage(chatId, result.message);
-      return;
-    }
-
-    // Call API to boost reactions
-    const apiResult = await APIHelper.boostReactions(parseInt(amount), chatId);
-    if (apiResult.success) {
-      await bot.sendMessage(chatId, result.message);
-    } else {
-      await bot.sendMessage(chatId, `❌ Error: ${apiResult.error}`);
-    }
   }
 
-  static async buyPremiumCommand(bot, chatId, userId) {
-    const user = db.getUser(userId);
+  static async processUserCommand(bot, chatId, userId, text, parts) {
+    const command = parts[0].toLowerCase();
 
-    const keyboard = {
-      inline_keyboard: [
-        [{ text: '💰 Buy with Points (100)', callback_data: 'buy_points' }],
-        [{ text: '🏦 Bank Transfer', callback_data: 'bank_transfer' }],
-        [{ text: '❌ Cancel', callback_data: 'cancel_buyprem' }],
-      ],
-    };
-
-    await bot.sendMessage(
-      chatId,
-      `💳 BUY PREMIUM
-
-⭐ Premium Benefits:
-  • ${config.features.premiumViewsLimit} Views/Day (vs ${config.features.freeViewsLimit})
-  • ${config.features.premiumReactionsLimit} Reactions/Day (vs ${config.features.freeReactionsLimit})
-  • Priority Support
-  • Boost 10x Points earning
-
-💰 Price: ${config.features.premiumCost} Points
-
-Your points: ${user.points}`,
-      { reply_markup: keyboard }
-    );
-  }
-
-  static async inviteCommand(bot, chatId, userId) {
-    const user = db.getUser(userId);
-    const keyboard = {
-      inline_keyboard: [
-        [
-          {
-            text: '📋 Copy Link',
-            url: `https://t.me/${config.bot.username}?start=ref_${user.referralCode}`,
-          },
-        ],
-      ],
-    };
-
-    await bot.sendMessage(
-      chatId,
-      MessageFormatter.referralMessage(user),
-      {
-        parse_mode: 'Markdown',
-        reply_markup: keyboard,
+    if (command === '/orders') {
+      const orders = OrderHandler.getUserOrders(userId);
+      if (orders.length === 0) {
+        await bot.sendMessage(chatId, `📦 You have no orders yet.\n\nUse /start to browse the shop! 🛍️`);
+        return;
       }
-    );
-  }
-
-  static async statsCommand(bot, chatId, userId) {
-    const user = db.getUser(userId);
-    await bot.sendMessage(chatId, MessageFormatter.statsMessage(user));
-  }
-
-  static async helpCommand(bot, chatId, userId) {
-    const isAdmin = db.isAdmin(userId);
-
-    let helpText = `📚 HELP & COMMANDS
-
-🎮 USER COMMANDS:
-/start - Start the bot
-/daily - Claim 2 points daily
-/view <amount> - Boost post views
-/react <amount> - Boost reactions
-/buyprem - Buy premium membership
-/invite - Get referral link
-/stats - View your statistics
-/help - Show this help message
-
-`;
-
-    if (isAdmin) {
-      helpText += `⚙️ ADMIN COMMANDS:
-/addadmin <id> - Add new admin
-/list - List all users
-/broadcast <msg> - Send message to all users
-/edit - Edit bank details
-/ban @username - Ban a user
-/unban @username - Unban a user
-/addchn @channel - Add channel to verify
-/gencode <points> <uses> - Generate redeem code
-/aigen <prompt> - AI code generation
-/stats_sys - System statistics`;
-    }
-
-    await bot.sendMessage(chatId, helpText);
-  }
-
-  // Admin Commands
-  static async addAdminCommand(bot, chatId, userId) {
-    if (!userId || isNaN(userId)) {
-      await bot.sendMessage(chatId, '❌ Usage: /addadmin <user_id>');
-      return;
-    }
-
-    const success = AdminHandler.addAdmin(parseInt(userId));
-    const message = success
-      ? `✅ Admin added successfully!\n\nNew Admin ID: ${userId}`
-      : '⚠️ This user is already an admin!';
-
-    await bot.sendMessage(chatId, message);
-  }
-
-  static async listCommand(bot, chatId) {
-    const users = AdminHandler.getListOfUsers();
-    let userList = `📋 USERS (${Object.keys(db.getAllUsers()).length})\n\n`;
-
-    users.forEach((user, index) => {
-      userList += `${index + 1}. @${user.username}\n`;
-      userList += `   ID: ${user.chatId}\n`;
-      userList += `   Points: ${user.points}\n`;
-      userList += `   Referrals: ${user.referrals}\n`;
-      userList += `   Status: ${user.isPremium ? 'PREMIUM' : 'FREE'}\n\n`;
-    });
-
-    if (Object.keys(db.getAllUsers()).length > 50) {
-      userList += `\n... and ${Object.keys(db.getAllUsers()).length - 50} more users`;
-    }
-
-    await bot.sendMessage(chatId, userList);
-  }
-
-  static async broadcastCommand(bot, chatId, text) {
-    const message = text.replace(/\/broadcast\s+/i, '').trim();
-
-    if (!message) {
-      await bot.sendMessage(chatId, '❌ Please provide a message to broadcast.');
-      return;
-    }
-
-    const count = AdminHandler.broadcastMessage(message);
-    const users = db.getAllUsers();
-
-    let sent = 0;
-    Object.values(users).forEach(user => {
-      if (!db.isBanned(user.id)) {
-        bot.sendMessage(user.chatId, `📢 ${message}`).catch(err => {
-          Logger.warn(`Failed to send message to ${user.username}`);
-        });
-        sent++;
-      }
-    });
-
-    await bot.sendMessage(chatId, `✅ Message sent to ${sent} users!`);
-  }
-
-  static async editBankCommand(bot, chatId) {
-    const bankDetails = db.getBankDetails();
-    await bot.sendMessage(
-      chatId,
-      `🏦 EDIT BANK DETAILS
-
-Current Details:
-Account Name: ${bankDetails.accountName || 'Not set'}
-Account Number: ${bankDetails.accountNumber || 'Not set'}
-Bank Name: ${bankDetails.bankName || 'Not set'}
-
-Send details in this format:
-\`Account Name | Account Number | Bank Name\`
-
-Example:
-\`John Doe | 1234567890 | State Bank\``,
-      { parse_mode: 'Markdown' }
-    );
-  }
-
-  static async banCommand(bot, chatId, username) {
-    if (!username) {
-      await bot.sendMessage(chatId, '❌ Usage: /ban @username');
-      return;
-    }
-
-    const cleanUsername = username.replace('@', '');
-    const users = db.getAllUsers();
-    const user = Object.values(users).find(u => u.username === cleanUsername);
-
-    if (!user) {
-      await bot.sendMessage(chatId, '❌ User not found!');
-      return;
-    }
-
-    const success = AdminHandler.banUser(user.id);
-    const message = success
-      ? `✅ User @${cleanUsername} has been banned!`
-      : '⚠️ User is already banned!';
-
-    await bot.sendMessage(chatId, message);
-  }
-
-  static async unbanCommand(bot, chatId, username) {
-    if (!username) {
-      await bot.sendMessage(chatId, '❌ Usage: /unban @username');
-      return;
-    }
-
-    const cleanUsername = username.replace('@', '');
-    const users = db.getAllUsers();
-    const user = Object.values(users).find(u => u.username === cleanUsername);
-
-    if (!user) {
-      await bot.sendMessage(chatId, '❌ User not found!');
-      return;
-    }
-
-    const success = AdminHandler.unbanUser(user.id);
-    const message = success
-      ? `✅ User @${cleanUsername} has been unbanned!`
-      : '❌ User not found or not banned!';
-
-    await bot.sendMessage(chatId, message);
-  }
-
-  static async addChannelCommand(bot, chatId, channelName) {
-    if (!channelName || !channelName.startsWith('@')) {
-      await bot.sendMessage(chatId, '❌ Usage: /addchn @channelname');
-      return;
-    }
-
-    const success = AdminHandler.addChannel(channelName);
-    const message = success
-      ? `✅ Channel ${channelName} added to verification list!`
-      : '❌ Invalid channel or already exists!';
-
-    await bot.sendMessage(chatId, message);
-  }
-
-  static async gencodeCommand(bot, chatId, points, uses) {
-    if (!points || !uses || isNaN(points) || isNaN(uses)) {
-      await bot.sendMessage(chatId, '❌ Usage: /gencode <points> <number_of_uses>\n\nExample: /gencode 10 50');
-      return;
-    }
-
-    const code = AdminHandler.generateRedeemCode(parseInt(points), parseInt(uses));
-
-    if (!code) {
-      await bot.sendMessage(chatId, '❌ Invalid points or uses amount!');
-      return;
-    }
-
-    await bot.sendMessage(
-      chatId,
-      `✅ Code generated!\n\nCode: \`${code}\`\nPoints: ${points}\nUses: ${uses}`,
-      { parse_mode: 'Markdown' }
-    );
-  }
-
-  static async aigenCommand(bot, chatId, text) {
-    const prompt = text.replace(/\/aigen\s+/i, '').trim();
-
-    if (!prompt) {
-      await bot.sendMessage(chatId, '❌ Usage: /aigen <your_prompt>');
-      return;
-    }
-
-    await bot.sendMessage(chatId, '⏳ Generating code... Please wait...');
-
-    const result = await APIHelper.generateCode(prompt);
-
-    if (!result.success) {
-      await bot.sendMessage(chatId, `❌ Error: ${result.error}`);
-      return;
-    }
-
-    try {
-      await bot.sendDocument(chatId, Buffer.from(result.code), {
-        filename: `generated_${Date.now()}.js`,
-        caption: '✅ AI Generated Code',
+      const statusEmoji = { pending: '⏳', confirmed: '✅', delivered: '🚚', cancelled: '❌' };
+      let msg = `📦 MY ORDERS (${orders.length})\n\n`;
+      orders.slice(0, 10).forEach((o, i) => {
+        msg += `${i + 1}. ${o.productName} — ${config.shop.currencySymbol}${Number(o.total).toFixed(2)} ${statusEmoji[o.status] || ''}\n`;
       });
-    } catch (error) {
-      await bot.sendMessage(chatId, `\`\`\`javascript\n${result.code.substring(0, 4000)}\n\`\`\``, {
-        parse_mode: 'Markdown',
-      });
+      await bot.sendMessage(chatId, msg);
+      return;
     }
-  }
 
-  static async systemStatsCommand(bot, chatId) {
-    const stats = AdminHandler.getSystemStats();
-
-    const statsText = `📊 SYSTEM STATISTICS
-
-👥 Total Users: ${stats.totalUsers}
-⭐ Premium Users: ${stats.premiumUsers}
-✅ Verified Users: ${stats.verifiedUsers}
-🚫 Banned Users: ${stats.bannedUsers}
-👮 Total Admins: ${stats.totalAdmins}
-💰 Total Points in System: ${stats.totalPoints}`;
-
-    await bot.sendMessage(chatId, statsText);
+    if (command === '/help') {
+      await bot.sendMessage(
+        chatId,
+        `ℹ️ HELP\n\n/start — Open the shop menu\n/orders — View my order history\n/help — This message`
+      );
+      return;
+    }
   }
 }
 

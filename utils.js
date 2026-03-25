@@ -1,176 +1,99 @@
-import axios from 'axios';
 import config from './config.js';
 
 export class Logger {
-  static info(message) {
-    console.log(`ℹ️  [${new Date().toISOString()}] ${message}`);
-  }
-
-  static success(message) {
-    console.log(`✅ [${new Date().toISOString()}] ${message}`);
-  }
-
-  static warn(message) {
-    console.warn(`⚠️  [${new Date().toISOString()}] ${message}`);
-  }
-
-  static error(message) {
-    console.error(`❌ [${new Date().toISOString()}] ${message}`);
-  }
-}
-
-export class APIHelper {
-  static async boostViews(amount, channelId) {
-    try {
-      const response = await axios.post(config.api.bitrahq.url, {
-        api_key: config.api.bitrahq.key,
-        action: 'boost_views',
-        amount,
-        channel_id: channelId,
-      });
-      return { success: true, data: response.data };
-    } catch (error) {
-      Logger.error(`API boost views error: ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
-
-  static async boostReactions(amount, channelId) {
-    try {
-      const response = await axios.post(config.api.bitrahq.url, {
-        api_key: config.api.bitrahq.key,
-        action: 'boost_reactions',
-        amount,
-        channel_id: channelId,
-      });
-      return { success: true, data: response.data };
-    } catch (error) {
-      Logger.error(`API boost reactions error: ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
-
-  static async generateCode(prompt) {
-    try {
-      const response = await axios.get(config.api.aiApi, {
-        params: { prompt },
-      });
-      return { success: true, code: response.data.message || response.data };
-    } catch (error) {
-      Logger.error(`AI API error: ${error.message}`);
-      return { success: false, error: error.message };
-    }
-  }
+  static info(message) { console.log(`ℹ️  [${new Date().toISOString()}] ${message}`); }
+  static success(message) { console.log(`✅ [${new Date().toISOString()}] ${message}`); }
+  static warn(message) { console.warn(`⚠️  [${new Date().toISOString()}] ${message}`); }
+  static error(message) { console.error(`❌ [${new Date().toISOString()}] ${message}`); }
 }
 
 export class MessageFormatter {
-  static mainMenu(user) {
-    return `🩸⃟ 𝕄Ｅ𝓷ⓐ🌹 MAIN MENU
+  static shopBanner(subtitle = '') {
+    return `🛍️ ${config.shop.name}\n${'─'.repeat(26)}\n${subtitle}`;
+  }
 
-👤 User: @${user.username}
-💰 Points: ${user.points}
-👥 Referrals: ${user.referrals}
-🌟 Status: ${user.isPremium ? 'PREMIUM ⭐' : 'FREE'}
+  static mainMenu(username) {
+    return `${this.shopBanner('WELCOME')}\n\n👋 Hello, ${username}!\n\nBrowse our store and place orders right here on Telegram.\n\nWhat would you like to do?`;
+  }
 
-Select an option:`;
+  static categoryMenu() {
+    return `🛍️ SHOP CATEGORIES\n\nChoose a category to browse:`;
+  }
+
+  static productList(categoryName, products) {
+    if (products.length === 0) {
+      return `${categoryName}\n\n⚠️ No products available yet in this category.\nCheck back soon!`;
+    }
+    const list = products
+      .map((p, i) => `${i + 1}. ${p.name} — ${config.shop.currencySymbol}${Number(p.price).toFixed(2)}`)
+      .join('\n');
+    return `${categoryName}\n\n${list}\n\nTap a product to see details:`;
+  }
+
+  static productDetail(product) {
+    const stock =
+      product.stock === -1
+        ? '✅ In Stock'
+        : product.stock > 0
+        ? `✅ ${product.stock} available`
+        : '❌ Out of Stock';
+    return `📦 ${product.name}\n\n💰 Price: ${config.shop.currencySymbol}${Number(product.price).toFixed(2)}\n\n📋 ${product.description}\n\n${stock}`;
+  }
+
+  static orderSummary(product, quantity, bankDetails) {
+    const total = (Number(product.price) * quantity).toFixed(2);
+    let text = `🧾 ORDER SUMMARY\n${'─'.repeat(26)}\n📦 ${product.name}\n💰 Price: ${config.shop.currencySymbol}${Number(product.price).toFixed(2)}\n🔢 Quantity: ${quantity}\n💵 Total: ${config.shop.currencySymbol}${total}\n${'─'.repeat(26)}\n`;
+    if (bankDetails && (bankDetails.accountName || bankDetails.accountNumber)) {
+      text += `\n🏦 PAYMENT DETAILS\n`;
+      if (bankDetails.bankName) text += `Bank: ${bankDetails.bankName}\n`;
+      if (bankDetails.accountName) text += `Name: ${bankDetails.accountName}\n`;
+      if (bankDetails.accountNumber) text += `Account: ${bankDetails.accountNumber}\n`;
+      text += `Amount to send: ${config.shop.currencySymbol}${total}\n`;
+    } else {
+      text += `\n⚠️ Payment info not configured yet. Admin will contact you.\n`;
+    }
+    text += `\n📸 After paying, send a screenshot of your payment receipt here to confirm your order.`;
+    return text;
+  }
+
+  static orderStatusLabel(status) {
+    return (
+      { pending: '⏳ Pending', confirmed: '✅ Confirmed', delivered: '🚚 Delivered', cancelled: '❌ Cancelled' }[
+        status
+      ] || status
+    );
+  }
+
+  static orderDetail(order) {
+    return `📋 ORDER #${order.id.slice(-6).toUpperCase()}\n${'─'.repeat(26)}\n📦 Product: ${order.productName}\n🔢 Qty: ${order.quantity}\n💵 Total: ${config.shop.currencySymbol}${Number(order.total).toFixed(2)}\n📊 Status: ${this.orderStatusLabel(order.status)}\n📅 Date: ${new Date(order.createdAt).toLocaleDateString()}`;
   }
 
   static adminMenu() {
-    return `⚙️ ADMIN PANEL
-
-Select an option:`;
-  }
-
-  static statsMessage(user) {
-    return `📊 YOUR STATISTICS
-
-👤 Username: @${user.username}
-💰 Total Points: ${user.points}
-👥 Total Referrals: ${user.referrals}
-🌟 Status: ${user.isPremium ? 'PREMIUM ⭐' : 'FREE'}
-📅 Member Since: ${new Date(user.joinedAt).toLocaleDateString()}
-
-📈 Today:
-  👁️ Views Used: ${user.viewsUsedToday}
-  ❤️ Reactions Used: ${user.reactionsUsedToday}
-  📥 Daily Claims: ${user.dailyClaimsToday}`;
-  }
-
-  static welcomeBanner(status = 'UNVERIFIED') {
-    return `┏━━[ WELCOME TO 🩸⃟ 𝕄Ｅ𝓷ⓐ🌹OFC BOT¹ ]━
-┃ ɴᴀᴍᴇ ʙᴏᴛ : 🩸⃟ 𝕄Ｅ𝓷ⓐ🌹
-┃ ᴠᴇʀ𝘴ɪᴏɴ : v2.0
-┃ ᴅᴇᴠᴇʟᴏᴘᴇʀ : @DENKI_CRASHER
-┃ ʀᴜɴᴛɪᴍᴇ : NODE.JS
-┃ sᴛᴀᴛᴜs : ${status}
-┗━━━━━━━━━━━━━━━━━━━━━━
-
-© 🩸⃟ 𝕄Ｅ𝓷ⓐ🌹
-━━━━━━━━ ✇➣`;
-  }
-
-  static referralMessage(user) {
-    const referralLink = `https://t.me/${config.bot.username}?start=ref_${user.referralCode}`;
-    return `👥 INVITE FRIENDS
-
-🔗 Your Referral Link:
-\`${referralLink}\`
-
-👥 Referrals: ${user.referrals}
-💰 Points from referrals: ${user.referrals * config.features.pointsPerReferral}
-
-✨ Earn ${config.features.pointsPerReferral} point per successful referral!`;
-  }
-}
-
-export class ValidationHelper {
-  static isValidUsername(username) {
-    return /^[a-zA-Z0-9_]{5,32}$/.test(username);
-  }
-
-  static isValidChannelName(name) {
-    return /^@[a-zA-Z0-9_]{5,32}$/.test(name);
-  }
-
-  static isValidAmount(amount, max) {
-    const num = parseInt(amount);
-    return !isNaN(num) && num > 0 && num <= max;
-  }
-
-  static isValidBankDetails(accountName, accountNumber, bankName) {
-    return (
-      accountName &&
-      accountName.trim().length > 0 &&
-      accountNumber &&
-      accountNumber.trim().length > 0 &&
-      bankName &&
-      bankName.trim().length > 0
-    );
+    return `⚙️ ADMIN PANEL\n${'─'.repeat(26)}\nManage your store:`;
   }
 }
 
 export class TimeHelper {
-  static getTodayString() {
-    return new Date().toDateString();
-  }
+  static getTodayString() { return new Date().toDateString(); }
+  static formatDate(dateStr) { return new Date(dateStr).toLocaleString(); }
+}
 
-  static isNewDay(lastDate) {
-    return lastDate !== this.getTodayString();
+export class ValidationHelper {
+  static isValidPrice(price) {
+    const p = parseFloat(price);
+    return !isNaN(p) && p > 0;
   }
-
-  static formatDate(date) {
-    return new Date(date).toLocaleDateString();
+  static isValidQuantity(qty) {
+    const q = parseInt(qty);
+    return !isNaN(q) && q > 0;
   }
-
-  static formatTime(date) {
-    return new Date(date).toLocaleTimeString();
+  static isValidStock(stock) {
+    const s = parseInt(stock);
+    return !isNaN(s) && s >= -1;
+  }
+  static isValidBankDetails(accountName, accountNumber, bankName) {
+    return accountName?.trim() && accountNumber?.trim() && bankName?.trim();
   }
 }
 
-export default {
-  Logger,
-  APIHelper,
-  MessageFormatter,
-  ValidationHelper,
-  TimeHelper,
-};
+export default { Logger, MessageFormatter, TimeHelper, ValidationHelper };

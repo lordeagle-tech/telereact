@@ -15,7 +15,7 @@
       "reactionsUsedToday": 0,
       "lastDailyReset": "Wed Mar 25 2026",
       "joinedAt": "2026-03-25T10:10:15.215Z",
-      "updatedAt": "2026-03-25T10:27:30.529Z"
+      "updatedAt": "2026-03-25T10:50:20.911Z"
     },
     "8583275059": {
       "id": 8583275059,
@@ -54,6 +54,5 @@
     "botActive": true,
     "maintenanceMode": false,
     "lastBackup": "2026-03-25T10:07:54.057Z"
-  },
-  "backupTime": "2026-03-25T10:27:30.532Z"
+  }
 }
