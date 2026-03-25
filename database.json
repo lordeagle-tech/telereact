@@ -1,0 +1,23 @@
+{
+  "users": {},
+  "admins": [
+    "6206811574"
+  ],
+  "bannedUsers": [],
+  "channels": [
+    "@DENKI_CRASHER",
+    "@MENA_TECH2"
+  ],
+  "bankDetails": {
+    "accountName": "",
+    "accountNumber": "",
+    "bankName": ""
+  },
+  "redeemCodes": {},
+  "pendingPayments": {},
+  "settings": {
+    "botActive": true,
+    "maintenanceMode": false,
+    "lastBackup": "2026-03-25T10:07:54.057Z"
+  }
+}
