@@ -38,45 +38,25 @@ bot.onText(/\/start(?:\s+(.+))?/, async msg => {
   UserHandler.initializeUser(userId, username, chatId);
   const user = db.getUser(userId);
 
+  // Auto-verify user
+  if (!user.verified) {
+    user.verified = true;
+    db.updateUser(userId, user);
+  }
+
   // Handle referral
   if (referralCode && referralCode.startsWith('ref_')) {
     const code = referralCode.substring(4);
     const users = db.getAllUsers();
     const referrer = Object.values(users).find(u => u.referralCode === code);
 
-    if (referrer && referrer.id !== userId && referrer.verified) {
+    if (referrer && referrer.id !== userId) {
       UserHandler.addReferral(referrer.id, code);
       Logger.info(`New referral: ${username} referred by ${referrer.username}`);
     }
   }
 
-  // Check verification
-  if (!user.verified) {
-    const channels = db.getChannels();
-    const channelList = channels.map(ch => `• ${ch}`).join('\n');
-
-    await bot.sendMessage(
-      chatId,
-      `${MessageFormatter.welcomeBanner('UNVERIFIED')}
-
-👋 Welcome ${username}!
-
-📱 You need to follow our channels first:
-
-${channelList}
-
-Once you've followed all channels, click the button below to verify.`,
-      {
-        reply_markup: {
-          inline_keyboard: [
-            [{ text: '✅ I have followed', callback_data: 'verify_channels' }],
-          ],
-        },
-      }
-    );
-  } else {
-    await showMainMenu(chatId, user);
-  }
+  await showMainMenu(chatId, user);
 });
 
 // Callback query handler
@@ -92,38 +72,6 @@ bot.on('callback_query', async query => {
   }
 
   try {
-    // Verify channels
-    if (query.data === 'verify_channels') {
-      const channels = db.getChannels();
-      const isVerified = await ChannelHandler.verifyChannelMembership(bot, userId, channels);
-
-      if (isVerified) {
-        user.verified = true;
-        db.updateUser(userId, user);
-
-        await bot.answerCallbackQuery(query.id, '✅ Verification successful!');
-        await bot.editMessageText(
-          `${MessageFormatter.welcomeBanner('VERIFIED')}
-
-🎉 You are now verified! Access granted.`,
-          {
-            chat_id: chatId,
-            message_id: query.message.message_id,
-            parse_mode: 'HTML',
-          }
-        );
-
-        setTimeout(() => showMainMenu(chatId, user), 1000);
-      } else {
-        await bot.answerCallbackQuery(
-          query.id,
-          '❌ Please follow all channels first!',
-          true
-        );
-      }
-      return;
-    }
-
     // Main menu
     if (query.data === 'show_menu') {
       await showMainMenu(chatId, user);

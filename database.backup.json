@@ -15,7 +15,7 @@
       "reactionsUsedToday": 0,
       "lastDailyReset": "Wed Mar 25 2026",
       "joinedAt": "2026-03-25T10:10:15.215Z",
-      "updatedAt": "2026-03-25T10:10:15.218Z"
+      "updatedAt": "2026-03-25T10:10:15.216Z"
     }
   },
   "admins": [
@@ -37,5 +37,6 @@
     "botActive": true,
     "maintenanceMode": false,
     "lastBackup": "2026-03-25T10:07:54.057Z"
-  }
+  },
+  "backupTime": "2026-03-25T10:10:15.218Z"
 }

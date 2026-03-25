@@ -115,7 +115,7 @@ class Database {
       points: 0,
       referrals: 0,
       referralCode: this.generateReferralCode(),
-      verified: false,
+      verified: true,
       isPremium: false,
       dailyClaimsToday: 0,
       lastDailyClaim: null,
