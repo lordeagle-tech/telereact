@@ -15,7 +15,7 @@
       "reactionsUsedToday": 0,
       "lastDailyReset": "Wed Mar 25 2026",
       "joinedAt": "2026-03-25T10:10:15.215Z",
-      "updatedAt": "2026-03-25T10:50:20.911Z"
+      "updatedAt": "2026-03-25T11:06:14.346Z"
     },
     "8583275059": {
       "id": 8583275059,
@@ -33,6 +33,14 @@
       "lastDailyReset": "Wed Mar 25 2026",
       "joinedAt": "2026-03-25T10:21:53.543Z",
       "updatedAt": "2026-03-25T10:22:42.145Z"
+    },
+    "7343892253": {
+      "id": 7343892253,
+      "username": "User7343892253",
+      "chatId": 7343892253,
+      "verified": true,
+      "joinedAt": "2026-03-25T11:07:36.723Z",
+      "updatedAt": "2026-03-25T11:07:36.724Z"
     }
   },
   "admins": [
@@ -54,5 +62,7 @@
     "botActive": true,
     "maintenanceMode": false,
     "lastBackup": "2026-03-25T10:07:54.057Z"
-  }
+  },
+  "products": {},
+  "orders": {}
 }

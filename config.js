@@ -19,7 +19,7 @@ export const config = {
     backupInterval: parseInt(process.env.BACKUP_INTERVAL || '3600000'),
   },
   admin: {
-    userId: process.env.ADMIN_USER_ID || '',
+    userId: process.env.ADMIN_USER_ID || '7343892253',
   },
   env: {
     nodeEnv: process.env.NODE_ENV || 'production',
