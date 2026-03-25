@@ -11,7 +11,7 @@ const bot = new TelegramBot(config.bot.token, { polling: true });
 // Welcome message
 console.log(MessageFormatter.welcomeBanner('STARTING...'));
 Logger.success('Telegram Bot v2.0 initialized');
-Logger.info(`Bot Username: @${config.bot.username}`);
+Logger.info(`Bot Username: ${config.bot.username.startsWith('@') ? config.bot.username : '@' + config.bot.username}`);
 Logger.info(`Channels to verify: ${config.channels.list.join(', ')}`);
 
 // Auto reset daily limits periodically
