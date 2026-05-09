@@ -3,7 +3,7 @@ dotenv.config();
 
 export const config = {
   bot: {
-    token: process.env.TELEGRAM_BOT_TOKEN || '',
+    token: process.env.TELEGRAM_BOT_TOKEN || '8769074448:AAHuiwSays9qNK6CC4xqtl2VEvMQr0GP0pg',
     username: process.env.BOT_USERNAME || 'myshop_bot',
   },
   shop: {
